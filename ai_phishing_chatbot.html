@@ -1,0 +1,472 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>AI Attacker Simulation – Phishing Chat Scenario</title>
+  <style>
+    :root { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
+    body { margin: 0; background: #0b0f14; color: #e8eef6; }
+    header { padding: 16px 20px; border-bottom: 1px solid #1f2a37; background: #0f1620; }
+    header h1 { margin: 0; font-size: 16px; font-weight: 600; }
+    header p { margin: 6px 0 0; font-size: 12px; opacity: 0.8; }
+    .wrap { max-width: 980px; margin: 0 auto; padding: 16px; display: grid; gap: 16px; grid-template-columns: 1.6fr 1fr; }
+    @media (max-width: 900px) { .wrap { grid-template-columns: 1fr; } }
+    .card { background: #0f1620; border: 1px solid #1f2a37; border-radius: 14px; overflow: hidden; }
+    .card h2 { margin: 0; padding: 12px 14px; font-size: 13px; border-bottom: 1px solid #1f2a37; opacity: 0.9; }
+    .chat { height: 520px; overflow: auto; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+    .msg { max-width: 82%; padding: 10px 12px; border-radius: 12px; line-height: 1.35; font-size: 13px; border: 1px solid transparent; }
+    .bot { align-self: flex-start; background: #111c28; border-color: #233347; }
+    .user { align-self: flex-end; background: #1a2a3f; border-color: #2e4764; }
+    .meta { font-size: 11px; opacity: 0.7; margin-top: 6px; }
+    .controls { padding: 12px 14px; border-top: 1px solid #1f2a37; display: grid; gap: 10px; }
+    .quick { display: flex; flex-wrap: wrap; gap: 8px; }
+    button {
+      background: #1b2533; color: #e8eef6; border: 1px solid #2a3a50;
+      padding: 8px 10px; border-radius: 10px; cursor: pointer; font-size: 12px;
+    }
+    button:hover { border-color: #3a5273; }
+    button.primary { background: #24344a; border-color: #3a5273; }
+    button.danger { background: #3a1d1d; border-color: #6b2b2b; }
+    .inputrow { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+    input {
+      width: 100%; padding: 10px 10px; border-radius: 10px;
+      border: 1px solid #2a3a50; background: #0b0f14; color: #e8eef6;
+      font-size: 13px;
+    }
+    .side { padding: 14px; display: grid; gap: 12px; }
+    .kv { display: grid; grid-template-columns: 1fr auto; gap: 8px; font-size: 12px; }
+    .pill { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 999px; border: 1px solid #2a3a50; background: #0b0f14; font-size: 12px; }
+    .log { white-space: pre-wrap; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; background: #0b0f14; border: 1px solid #2a3a50; padding: 10px; border-radius: 10px; height: 190px; overflow: auto; }
+    .hint { font-size: 12px; opacity: 0.85; line-height: 1.45; }
+    .ok { color: #8ff0a4; }
+    .warn { color: #ffd38a; }
+    .bad { color: #ff9aa2; }
+    .footer { padding: 10px 14px; border-top: 1px solid #1f2a37; font-size: 11px; opacity: 0.75; }
+    a { color: #9ecbff; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>AI Attacker Simulation (Rule-Based) — Interactive Phishing / Social Engineering</h1>
+    <p>Local prototype (no APIs). The agent adapts tone & tactics based on user responses. Designed for cybersecurity training.</p>
+  </header>
+
+  <div class="wrap">
+    <section class="card">
+      <h2>Chat</h2>
+      <div id="chat" class="chat" aria-live="polite"></div>
+
+      <div class="controls">
+        <div class="quick" id="quickBtns"></div>
+
+        <div class="inputrow">
+          <input id="textInput" type="text" placeholder="Type a reply (e.g., 'Who are you?', 'I will verify on the official website', 'I won't share info')" />
+          <button id="sendBtn" class="primary">Send</button>
+        </div>
+
+        <div class="quick">
+          <button id="restartBtn">Restart</button>
+          <button id="exportBtn">Export log (TXT)</button>
+        </div>
+      </div>
+
+      <div class="footer">
+        Tip: In a thesis, describe this as an <b>adaptive interactive agent</b> that simulates attacker strategies (urgency, authority, reassurance) and returns personalized feedback.
+      </div>
+    </section>
+
+    <aside class="card">
+      <h2>Scenario State</h2>
+      <div class="side">
+        <div class="kv"><span>Persona (attacker)</span><span class="pill" id="personaPill">IT Support</span></div>
+        <div class="kv"><span>Stage</span><span class="pill" id="stagePill">1 / 5</span></div>
+        <div class="kv"><span>Tone</span><span class="pill" id="tonePill">Neutral</span></div>
+        <div class="kv"><span>Awareness Score</span><span class="pill" id="scorePill">0</span></div>
+
+        <div class="hint">
+          <div><b>Goal (training):</b> recognize manipulation attempts and apply safe practice (verify independently, refuse to share credentials, report).</div>
+          <div style="margin-top:8px;"><b>Signals:</b> urgency, authority, unusual requests, pressure, secret links, “verify now” language.</div>
+        </div>
+
+        <div>
+          <div style="font-size:12px; opacity:.9; margin-bottom:6px;"><b>Internal log</b> (for evaluation / screenshots)</div>
+          <div id="log" class="log"></div>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+<script>
+(() => {
+  // ---------- Utilities ----------
+  const $ = (id) => document.getElementById(id);
+  const chatEl = $("chat");
+  const logEl = $("log");
+
+  const state = {
+    persona: "IT Support",
+    stage: 1,               // 1..5
+    tone: "Neutral",        // Neutral | Reassuring | Urgent | Authoritative
+    awareness: 0,
+    ended: false,
+    transcript: [],         // {from:"bot"|"user", text, meta?}
+    signals: { gaveInfo:false, clickedLink:false, askedVerify:false, refused:false, reported:false }
+  };
+
+  function addMsg(from, text, meta="") {
+    const div = document.createElement("div");
+    div.className = `msg ${from === "bot" ? "bot" : "user"}`;
+    div.innerHTML = escapeHtml(text).replace(/\n/g, "<br>");
+    if (meta) {
+      const m = document.createElement("div");
+      m.className = "meta";
+      m.textContent = meta;
+      div.appendChild(m);
+    }
+    chatEl.appendChild(div);
+    chatEl.scrollTop = chatEl.scrollHeight;
+    state.transcript.push({ from, text, meta });
+    renderLog();
+  }
+
+  function escapeHtml(s) {
+    return s.replace(/[&<>"']/g, (c) => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#039;" }[c]));
+  }
+
+  function setPills() {
+    $("personaPill").textContent = state.persona;
+    $("stagePill").textContent = `${state.stage} / 5`;
+    $("tonePill").textContent = state.tone;
+    $("scorePill").textContent = String(state.awareness);
+  }
+
+  function renderLog() {
+    const lines = [];
+    lines.push(`persona=${state.persona} stage=${state.stage} tone=${state.tone} awareness=${state.awareness}`);
+    lines.push(`signals=${JSON.stringify(state.signals)}`);
+    lines.push("");
+    for (const t of state.transcript) {
+      lines.push(`${t.from.toUpperCase()}: ${t.text}`);
+    }
+    logEl.textContent = lines.join("\n");
+    setPills();
+  }
+
+  function exportLog() {
+    const blob = new Blob([logEl.textContent], { type: "text/plain;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "ai_phishing_chat_log.txt";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(a.href);
+  }
+
+  // ---------- Adaptive logic ----------
+  function classifyUserInput(text) {
+    const t = text.toLowerCase().trim();
+
+    const asksIdentity = /(who are you|identify|your name|are you really|prove|verification|confirm)/i.test(text);
+    const asksVerify = /(official|website|call|phone|support ticket|verify independently|security team|it desk|contact)/i.test(text);
+    const refuses = /(no|won't|will not|refuse|stop|leave me|not sharing|i am not|i won't share)/i.test(text);
+    const sharesCreds = /(password|otp|code|verification code|pin|username|login)/i.test(text) && /(here|is|it's|my|:)/i.test(text);
+    const clicksLink = /(clicked|open(ed)? the link|i clicked|i opened the link|go to the link)/i.test(text);
+    const reports = /(report|reported|security team|phishing report|mark as phishing)/i.test(text);
+
+    return { asksIdentity, asksVerify, refuses, sharesCreds, clicksLink, reports };
+  }
+
+  function adaptTone(intent) {
+    // "AI" behavior: adapt to user stance
+    if (intent.asksVerify || intent.asksIdentity) {
+      // user is cautious -> attacker tries reassurance or authority
+      state.tone = (Math.random() < 0.5) ? "Reassuring" : "Authoritative";
+    } else if (intent.refuses) {
+      // user refuses -> attacker escalates urgency
+      state.tone = "Urgent";
+    } else {
+      // default -> mild pressure
+      state.tone = "Neutral";
+    }
+  }
+
+  function attackerMessageForStage() {
+    // Stages:
+    // 1) Initial contact, neutral/credible
+    // 2) Request action: click link / confirm
+    // 3) Escalate: urgency/authority/reassurance
+    // 4) Critical request: credentials / OTP
+    // 5) Outcome + personalized feedback
+    const tone = state.tone;
+
+    const voice = {
+      Neutral: {
+        prefix: "Hello — this is IT Support.",
+        style: "We noticed unusual activity on your account.",
+        ask: "Please follow the verification link to confirm your identity."
+      },
+      Reassuring: {
+        prefix: "Hi! IT Support here 🙂",
+        style: "No worries — this is a routine verification to keep your account safe.",
+        ask: "Could you quickly confirm via the secure link?"
+      },
+      Urgent: {
+        prefix: "IT Support — URGENT NOTICE",
+        style: "Your account will be suspended within 30 minutes due to suspicious activity.",
+        ask: "Verify now to avoid service disruption."
+      },
+      Authoritative: {
+        prefix: "IT Security Department",
+        style: "This is an official security action required for compliance.",
+        ask: "Complete verification immediately."
+      }
+    }[tone];
+
+    const fakeLink = "https://secure-it-verification.support-check[.]com/login";
+    const fakeRef = "Ticket: #SEC-1042";
+
+    if (state.stage === 1) {
+      return `${voice.prefix}\n\n${voice.style}\n${fakeRef}`;
+    }
+    if (state.stage === 2) {
+      return `${voice.ask}\n\nUse this link: ${fakeLink}\n\nIf you have questions, reply here.`;
+    }
+    if (state.stage === 3) {
+      // escalate tactics
+      const tactics = [
+        "This is time-sensitive. Delays may lock your access.",
+        "We are contacting all employees — please cooperate to prevent escalation.",
+        "I can help you resolve this quickly if you follow the steps.",
+        "We already detected a login attempt — confirm now to stop it."
+      ];
+      return `${voice.prefix}\n\n${tactics[Math.floor(Math.random()*tactics.length)]}\n\nPlease proceed with verification.`;
+    }
+    if (state.stage === 4) {
+      // critical request
+      const asks = [
+        "To confirm, please send your username and the 6-digit verification code you receive.",
+        "Please provide your login email so we can finalize verification.",
+        "For immediate validation, reply with the one-time code (OTP) from your authenticator."
+      ];
+      return `${voice.prefix}\n\n${asks[Math.floor(Math.random()*asks.length)]}`;
+    }
+    return "";
+  }
+
+  function personalizedFeedback() {
+    // Determine outcome based on signals & awareness
+    let outcome;
+    if (state.signals.gaveInfo) outcome = "COMPROMISED";
+    else if (state.signals.clickedLink && !state.signals.reported) outcome = "HIGH_RISK";
+    else if (state.signals.reported) outcome = "SAFE";
+    else if (state.signals.refused || state.signals.askedVerify) outcome = "SAFER";
+    else outcome = "UNCLEAR";
+
+    // Map awareness to level (simple)
+    let level = "Medium";
+    if (state.awareness >= 2) level = "High";
+    if (state.awareness <= 0) level = "Low";
+
+    const lines = [];
+    lines.push(`Outcome: ${outcome}`);
+    lines.push(`Awareness level: ${level} (score ${state.awareness})`);
+    lines.push("");
+    lines.push("What happened:");
+    if (outcome === "COMPROMISED") {
+      lines.push("- You shared sensitive information. Attackers use it to access accounts.");
+      lines.push("- This bypasses technical controls because the credentials appear “legitimate”.");
+    } else if (outcome === "HIGH_RISK") {
+      lines.push("- You interacted with the link. Even without sharing credentials, this increases exposure.");
+      lines.push("- Safer response: verify through official channels and report the message.");
+    } else if (outcome === "SAFE") {
+      lines.push("- You reported the attempt, reducing risk for you and others.");
+      lines.push("- Reporting enables blocking and awareness across the organization.");
+    } else if (outcome === "SAFER") {
+      lines.push("- You showed caution (verification/refusal). That reduces your personal risk.");
+      lines.push("- The best next step is to report the attempt to security/IT.");
+    } else {
+      lines.push("- Your actions did not clearly resolve the risk. Use verify + report as default.");
+    }
+
+    lines.push("");
+    lines.push("Social engineering techniques used by the attacker:");
+    const used = [];
+    if (state.tone === "Urgent") used.push("Urgency / time pressure");
+    if (state.tone === "Authoritative") used.push("Authority / compliance");
+    if (state.tone === "Reassuring") used.push("Reassurance to lower suspicion");
+    used.push("Impersonation (pretending to be IT Support)");
+    lines.push(`- ${used.join("\n- ")}`);
+
+    lines.push("");
+    lines.push("Safe practice checklist:");
+    lines.push("- Do not click verification links in unexpected messages");
+    lines.push("- Verify independently (official site / official phone / ticket system)");
+    lines.push("- Never share passwords or OTP codes");
+    lines.push("- Report suspicious messages");
+
+    return lines.join("\n");
+  }
+
+  // ---------- Conversation flow ----------
+  function startScenario() {
+    // reset
+    state.persona = "IT Support";
+    state.stage = 1;
+    state.tone = "Neutral";
+    state.awareness = 0;
+    state.ended = false;
+    state.transcript = [];
+    state.signals = { gaveInfo:false, clickedLink:false, askedVerify:false, refused:false, reported:false };
+
+    chatEl.innerHTML = "";
+    updateQuickButtons();
+    setPills();
+
+    addMsg("bot",
+`Welcome to the interactive scenario.
+
+I am contacting you as IT Support regarding account security.
+Please respond as you would in a real situation.`,
+"Scenario begins");
+
+    addMsg("bot", attackerMessageForStage());
+  }
+
+  function advanceStage() {
+    if (state.stage < 4) state.stage += 1;
+    updateQuickButtons();
+    setPills();
+    addMsg("bot", attackerMessageForStage());
+  }
+
+  function endScenario() {
+    state.stage = 5;
+    state.ended = true;
+    updateQuickButtons();
+    setPills();
+    addMsg("bot", "— Scenario ended —\n\n" + personalizedFeedback(), "Personalized feedback");
+  }
+
+  function applyScoring(intent) {
+    // Awareness scoring: cautious +, risky -, very risky --
+    if (intent.sharesCreds) { state.awareness -= 2; state.signals.gaveInfo = true; }
+    if (intent.clicksLink) { state.awareness -= 1; state.signals.clickedLink = true; }
+    if (intent.asksVerify || intent.asksIdentity) { state.awareness += 1; state.signals.askedVerify = true; }
+    if (intent.refuses) { state.awareness += 1; state.signals.refused = true; }
+    if (intent.reports) { state.awareness += 2; state.signals.reported = true; }
+  }
+
+  function handleUserText(text) {
+    if (!text || !text.trim()) return;
+
+    addMsg("user", text);
+
+    if (state.ended) {
+      addMsg("bot", "You can restart to try a different approach.", "Tip");
+      return;
+    }
+
+    const intent = classifyUserInput(text);
+    applyScoring(intent);
+    adaptTone(intent);
+
+    // If user reports or refuses strongly, we can end earlier with success
+    if (intent.reports) {
+      addMsg("bot", "Thank you for reporting. (In a real system, the security team would investigate.)");
+      return endScenario();
+    }
+
+    // If user shares creds -> end as compromised
+    if (intent.sharesCreds) {
+      addMsg("bot", "…Understood. Processing verification.");
+      return endScenario();
+    }
+
+    // If user is very cautious: guide to safe practice then end
+    if (intent.asksVerify) {
+      addMsg("bot",
+"Okay — if you prefer, you can verify via the official portal.\n\n(Training note: verifying independently is a safe practice.)");
+      // nudge: suggest reporting
+      addMsg("bot", "Would you like to report this message to security?", "Suggestion");
+      // stay at stage 4 to allow "report"
+      state.stage = Math.min(4, state.stage + 1);
+      updateQuickButtons();
+      return;
+    }
+
+    // Otherwise progress the attacker sequence
+    if (state.stage < 4) return advanceStage();
+
+    // Stage 4: critical decision moment
+    addMsg("bot",
+"Final step required.\nReply with the requested info so we can finish verification.",
+state.tone === "Urgent" ? "Pressure escalates" : "Attempt continues");
+
+    // Give the user one more turn; after that, end with feedback
+    if (state.stage === 4) {
+      // If user keeps engaging without reporting/refusal, end as high risk
+      state.stage = 4.5; // internal marker
+      updateQuickButtons();
+      return;
+    }
+
+    // If they already had a final warning and still engage, end
+    return endScenario();
+  }
+
+  // ---------- Quick buttons (guided interaction) ----------
+  function updateQuickButtons() {
+    const box = $("quickBtns");
+    box.innerHTML = "";
+
+    const mk = (label, value, cls="") => {
+      const b = document.createElement("button");
+      b.textContent = label;
+      if (cls) b.className = cls;
+      b.onclick = () => handleUserText(value);
+      box.appendChild(b);
+    };
+
+    if (state.ended) {
+      mk("Restart", "__restart__", "");
+      // Override restart behavior
+      box.querySelector("button").onclick = startScenario;
+      return;
+    }
+
+    // Stage-aware suggested replies (still allow free text)
+    mk("Who is this? (verify identity)", "Who are you? Can you verify this request?");
+    mk("I will verify independently", "I will verify through the official website / official phone number.");
+    mk("I refuse to share info", "I won't share any passwords or codes here.");
+    mk("Report this", "I am reporting this message as phishing.", "primary");
+
+    if (state.stage >= 2 && state.stage <= 4) {
+      mk("I clicked the link", "I clicked the link you sent.", "danger");
+      mk("My OTP is 123456", "My verification code is: 123456", "danger");
+    }
+  }
+
+  // ---------- Wire up UI ----------
+  $("sendBtn").addEventListener("click", () => {
+    const v = $("textInput").value;
+    $("textInput").value = "";
+    handleUserText(v);
+  });
+  $("textInput").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      $("sendBtn").click();
+    }
+  });
+  $("restartBtn").addEventListener("click", startScenario);
+  $("exportBtn").addEventListener("click", exportLog);
+
+  // Start
+  updateQuickButtons();
+  startScenario();
+})();
+</script>
+</body>
+</html>
